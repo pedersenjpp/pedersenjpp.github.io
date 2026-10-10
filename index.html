@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Sider</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400;600;700&display=swap">
+<style>
+/* Forside: en enkel liste over sitets HTML-sider, hentet automatisk fra repoet. */
+:root{
+  --bg:#f2f1ee; --surface:#fbfaf8; --ink:#201f1d; --muted:#69645e; --line:#dad5cf; --blue:#2843a4;
+  --sans:"Schibsted Grotesk","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#171615; --surface:#201e1c; --ink:#ebe9e5; --muted:#a39c95; --line:#38342f; --blue:#9eadff; color-scheme:dark; }
+}
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 var(--sans); padding:32px 16px 48px}
+main{max-width:640px; margin:0 auto}
+h1{font-size:2rem; line-height:1.1; margin:0 0 6px; letter-spacing:-.015em}
+.lede{margin:0 0 24px; color:var(--muted)}
+ul{list-style:none; margin:0; padding:0; display:grid; gap:10px}
+a.item{display:flex; justify-content:space-between; align-items:center; gap:16px;
+  padding:16px 18px; background:var(--surface); border:1px solid var(--line); border-radius:10px;
+  color:var(--ink); text-decoration:none}
+a.item:hover{border-color:var(--blue)}
+a.item:focus-visible{outline:2px solid var(--blue); outline-offset:2px}
+.name{font-weight:600; font-size:17px; min-width:0; overflow-wrap:anywhere}
+.file{font:12px/1.4 var(--mono); color:var(--muted); white-space:nowrap}
+.arrow{color:var(--blue); font-size:20px; line-height:1}
+.status{color:var(--muted); font-family:var(--mono); font-size:13px}
+@media (max-width:420px){ .file{display:none} }
+</style>
+</head>
+<body>
+<main>
+  <h1>Sider</h1>
+  <p class="lede">Vælg en side. Nogle sider kræver en adgangskode.</p>
+  <ul id="list"></ul>
+  <p class="status" id="status">Henter sider…</p>
+</main>
+<script>
+(async function(){
+  const list = document.getElementById('list');
+  const status = document.getElementById('status');
+
+  // Finder repoet ud fra adressen: brugernavn.github.io (forside-repo) eller brugernavn.github.io/repo/
+  const owner = location.hostname.split('.')[0];
+  const parts = location.pathname.split('/').filter(Boolean);
+  const isProject = parts.length > 0 && !/\.html?$/i.test(parts[0]);
+  const repo = isProject ? parts[0] : location.hostname;
+  const base = isProject ? '/' + parts[0] + '/' : '/';
+
+  // Sider med "skjult" i filnavnet kommer ikke på listen.
+  const skip = name => /^index\.html?$/i.test(name) || /skjult/i.test(name);
+  const pretty = file => {
+    const s = file.replace(/\.html?$/i, '').replace(/[-_]+/g, ' ').replace(/oe/g, 'ø').replace(/aa/g, 'å').replace(/ae/g, 'æ');
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  };
+
+  let files;
+  try {
+    const res = await fetch('https://api.github.com/repos/' + owner + '/' + repo + '/contents/', { headers: { Accept: 'application/vnd.github+json' } });
+    if (!res.ok) throw new Error(res.status);
+    files = (await res.json()).filter(f => f.type === 'file' && /\.html?$/i.test(f.name) && !skip(f.name)).map(f => f.name);
+  } catch (e) {
+    status.textContent = 'Kunne ikke hente listen over sider lige nu. Prøv at genindlæse om lidt.';
+    return;
+  }
+  if (!files.length) { status.textContent = 'Der er ingen sider endnu.'; return; }
+
+  // Bruger sidens egen titel som navn, ellers filnavnet.
+  const pages = await Promise.all(files.map(async name => {
+    let title = '';
+    try {
+      const html = await (await fetch(base + encodeURIComponent(name))).text();
+      const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      if (m) { const t = document.createElement('textarea'); t.innerHTML = m[1].trim(); title = t.value; }
+    } catch (e) {}
+    return { name, title: title || pretty(name) };
+  }));
+  pages.sort((a, b) => a.title.localeCompare(b.title, 'da'));
+
+  for (const p of pages) {
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.className = 'item';
+    a.href = base + encodeURIComponent(p.name);
+    const name = document.createElement('span'); name.className = 'name'; name.textContent = p.title;
+    const file = document.createElement('span'); file.className = 'file'; file.textContent = p.name;
+    const arrow = document.createElement('span'); arrow.className = 'arrow'; arrow.setAttribute('aria-hidden', 'true'); arrow.textContent = '→';
+    const right = document.createElement('span'); right.style.display = 'flex'; right.style.alignItems = 'center'; right.style.gap = '12px';
+    right.append(file, arrow);
+    a.append(name, right);
+    li.append(a);
+    list.append(li);
+  }
+  status.hidden = true;
+})();
+</script>
+</body>
+</html>
