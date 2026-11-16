@@ -1,1 +1,1 @@
-# pedersenjpp.github.io
+# AI-Projects
